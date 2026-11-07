@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Hellwig Consultancy LTD
+Copyright (c) 2026 Martin P. Hellwig <martin@hellwig.uk>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,41 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+--------------------------------------------------------------------------------
+Open Government Licence (OGL) v3.0 – Data Attribution
+--------------------------------------------------------------------------------
+
+This software processes and builds upon data from Ordnance Survey:
+
+- OS Open Names
+- OS Open Roads
+
+These datasets contain public sector information licensed under the
+Open Government Licence v3.0.
+
+Attribution (required):
+Contains OS data © Crown copyright and database right 2026.
+Contains public sector information licensed under the Open Government Licence v3.0.
+https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+
+You are free to:
+- copy, publish, distribute and transmit the Information;
+- adapt the Information;
+- exploit the Information commercially and non-commercially.
+
+You must:
+- acknowledge the source of the Information (as above);
+- include or link to the Open Government Licence.
+
+This licence does not grant any right to use the Information in a way that
+suggests any official status or that the Information Provider endorses you
+or your use of the Information.
+
+The Information is licensed "as is". The Information Provider excludes all
+representations, warranties, obligations and liabilities to the maximum
+extent permitted by law.
+
+Full licence text:
+https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
