@@ -1,0 +1,38 @@
+[project]
+name = "opennames"
+version = "0.1.0"
+description = "UK postcode nearest roads and landmarks from OS Open Names and OS Open Roads"
+requires-python = ">=3.14"
+dependencies = [
+    "geopandas>=1.0",
+    "pyogrio",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "coverage",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py314"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["opennames"]
+
+[tool.coverage.run]
+branch = true
+source = ["opennames"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+]

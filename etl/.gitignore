@@ -1,0 +1,8 @@
+# Track the directories; ignore extract/transform payloads.
+extract/*
+!extract/.gitkeep
+transform/*
+!transform/.gitkeep
+
+# Dated load zips stay on disk. Only the current output_zip is force-added.
+load/openpostcode_uk_*.zip

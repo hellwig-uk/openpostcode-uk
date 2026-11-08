@@ -1,0 +1,15 @@
+{
+  "open_names": {
+    "list_url": "https://api.os.uk/downloads/v1/products/OpenNames/downloads?format=GeoPackage&area=GB",
+    "fileName": "opname_gpkg_gb.zip",
+    "md5": "07d2f41ee34c6bef25802412650b01c7",
+    "size": 209544222
+  },
+  "open_roads": {
+    "list_url": "https://api.os.uk/downloads/v1/products/OpenRoads/downloads?format=GeoPackage&area=GB",
+    "fileName": "oproad_gpkg_gb.zip",
+    "md5": "0c7a04d0698268aeda5a717444f646d8",
+    "size": 1010630367
+  },
+  "output_zip": "openpostcode_uk_2026312.zip"
+}
