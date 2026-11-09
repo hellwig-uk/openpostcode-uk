@@ -21,16 +21,16 @@ Python 3.14. Use the project virtualenv:
 
 ## Commands
 
-Fetch (if needed), transform, and export:
+Download OS data if needed, rebuild sqlite if stale, and write the load zip:
 
 ```bash
-.venv/bin/python main.py build
+.venv/bin/python main.py export
 ```
 
-`python main.py` with no command prints help. `--etl-dir` defaults to `etl`. Rebuild sqlite and the export from local extract files (`--force` does not re-download zips that are already present):
+`python main.py` with no command prints help. `--etl-dir` defaults to `etl`. Rebuild sqlite and the load zip from local extract files (`--force` does not re-download zips that are already present):
 
 ```bash
-.venv/bin/python main.py build --force
+.venv/bin/python main.py export --force
 ```
 
 Download the published zip from GitHub and rebuild sqlite (no extract/transform):
@@ -46,7 +46,7 @@ Look up one postcode in sqlite:
 .venv/bin/python main.py get SW1A 1AA
 ```
 
-Unknown postcode exits `1`. Missing sqlite prints `sqlite not found; run build or import`.
+Unknown postcode exits `1`. Missing sqlite prints `sqlite not found; run export or import`.
 
 Format the tree (isort, then Black):
 

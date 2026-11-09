@@ -75,7 +75,7 @@ def lookup(sqlite_path, tokens):
     postcode = normalise_postcode(" ".join(tokens))
     conn = open_db(sqlite_path)
     if conn is None:
-        return 1, "", "sqlite not found; run build or import"
+        return 1, "", "sqlite not found; run export or import"
     try:
         if not postcode_exists(conn, postcode):
             return 1, "", "postcode not found"

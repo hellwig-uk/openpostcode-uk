@@ -94,16 +94,24 @@ def _load_zip_present(load_dir):
     return (Path(load_dir) / OUTPUT_ZIP_NAME).is_file()
 
 
+def md5s_current(remote, sources):
+    for key, _list_url, _default in PRODUCTS:
+        item = remote.get(key) or {}
+        recorded = sources.get(key) or {}
+        remote_md5 = (item.get("md5") or "").lower()
+        if not remote_md5:
+            return False
+        if (recorded.get("md5") or "").lower() != remote_md5:
+            return False
+    return True
+
+
 def skip_all_downloads(paths, remote, sources):
     if not paths["sqlite"].is_file():
         return False
     if not _load_zip_present(paths["load"]):
         return False
-    for key, item in remote.items():
-        recorded = sources.get(key) or {}
-        if (recorded.get("md5") or "").lower() != item["md5"]:
-            return False
-    return True
+    return md5s_current(remote, sources)
 
 
 def download_zip(url, dest, expected_size=None, progress=False):
@@ -191,7 +199,23 @@ def gpkg_beside(zip_path):
     return matches[0]
 
 
-def ensure_product(paths, key, remote, progress=False, log=None, force=False):
+def _download_and_verify(remote, zip_path, progress=False):
+    download_zip(
+        remote["url"],
+        zip_path,
+        expected_size=remote.get("size"),
+        progress=progress,
+    )
+    actual = file_md5(zip_path, progress=progress)
+    if actual != remote["md5"]:
+        raise ValueError(
+            f"md5 mismatch for {zip_path.name}: {actual} != {remote['md5']}"
+        )
+
+
+def ensure_product(
+    paths, key, remote, progress=False, log=None, force=False, recorded_md5=None
+):
     zip_path = paths["extract"] / remote["fileName"]
     if force and zip_path.is_file():
         if log is not None:
@@ -203,22 +227,23 @@ def ensure_product(paths, key, remote, progress=False, log=None, force=False):
         if gpkg is None:
             raise FileNotFoundError(f"no GeoPackage extracted from {zip_path}")
         return zip_path, Path(gpkg)
-    if zip_path.is_file() and file_md5(zip_path, progress=progress) == remote["md5"]:
+    recorded = (recorded_md5 or "").lower()
+    remote_md5 = remote["md5"].lower()
+    downloaded = False
+    if not zip_path.is_file():
+        _download_and_verify(remote, zip_path, progress=progress)
+        downloaded = True
+    elif recorded == remote_md5:
         if log is not None:
             log.write(f"already present, md5 match: {zip_path.name}\n")
-        downloaded = False
+    elif recorded:
+        _download_and_verify(remote, zip_path, progress=progress)
+        downloaded = True
+    elif file_md5(zip_path, progress=progress) == remote_md5:
+        if log is not None:
+            log.write(f"already present, md5 match: {zip_path.name}\n")
     else:
-        download_zip(
-            remote["url"],
-            zip_path,
-            expected_size=remote.get("size"),
-            progress=progress,
-        )
-        actual = file_md5(zip_path, progress=progress)
-        if actual != remote["md5"]:
-            raise ValueError(
-                f"md5 mismatch for {zip_path.name}: {actual} != {remote['md5']}"
-            )
+        _download_and_verify(remote, zip_path, progress=progress)
         downloaded = True
     gpkg = gpkg_beside(zip_path)
     if downloaded or gpkg is None or not Path(gpkg).is_file():
@@ -229,18 +254,22 @@ def ensure_product(paths, key, remote, progress=False, log=None, force=False):
     return zip_path, Path(gpkg)
 
 
-def fetch_extract(paths, progress=False, log=None, force=False):
+def fetch_extract(paths, progress=False, log=None, force=False, remote=None):
     ensure_dirs(paths)
-    remote = list_all_products()
+    if remote is None:
+        remote = list_all_products()
     sources = load_sources(paths["sources"])
-    if not force and skip_all_downloads(paths, remote, sources):
-        if log is not None:
-            log.write("already present, md5 match: load and sqlite current\n")
-        return remote, False
     gpkgs = {}
     for key, item in remote.items():
+        recorded = (sources.get(key) or {}).get("md5")
         zip_path, gpkg = ensure_product(
-            paths, key, item, progress=progress, log=log, force=force
+            paths,
+            key,
+            item,
+            progress=progress,
+            log=log,
+            force=force,
+            recorded_md5=recorded,
         )
         gpkgs[key] = {"zip": zip_path, "gpkg": gpkg, "remote": item}
     return remote, gpkgs

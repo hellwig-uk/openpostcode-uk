@@ -1,16 +1,22 @@
 """Orchestrate fetch, transform, and load."""
 
+import sqlite3
 import sys
 
 from tqdm import tqdm
 
-from openpostcode import UNIQUE_NAME_CAP
+from openpostcode import UNIQUE_NAME_CAP, supply
 from openpostcode.extract import read_postcodes
 from openpostcode.gitindex import sync_load_zip
 from openpostcode.match import assign_tiles, match_tile
 from openpostcode.paths import OUTPUT_ZIP_NAME, ensure_dirs
 from openpostcode.store import LOAD_ZIP_URL, connect, export_zip, import_zip, write_rows
-from openpostcode.supply import download_zip, fetch_extract, load_sources, save_sources
+from openpostcode.supply import (
+    load_sources,
+    md5s_current,
+    save_sources,
+    skip_all_downloads,
+)
 
 
 def transform_all(names_gpkg, roads_gpkg, progress=False, writer=None):
@@ -96,11 +102,7 @@ def write_catalog(paths, remote, output_zip):
     save_sources(paths["sources"], payload)
 
 
-def run_build(paths, progress=False, log=None, force=False):
-    ensure_dirs(paths)
-    remote, gpkgs = fetch_extract(paths, progress=progress, log=log, force=force)
-    if gpkgs is False:
-        return 0
+def _rematch_and_write(paths, gpkgs, remote, progress=False):
     names_gpkg = gpkgs["open_names"]["gpkg"]
     roads_gpkg = gpkgs["open_roads"]["gpkg"]
     conn = connect(paths["sqlite"])
@@ -121,12 +123,58 @@ def run_build(paths, progress=False, log=None, force=False):
         conn.close()
     write_catalog(paths, remote, OUTPUT_ZIP_NAME)
     sync_load_zip(paths["root"], OUTPUT_ZIP_NAME)
+
+
+def _write_zip_from_sqlite(paths, remote, progress=False):
+    zip_path = paths["load"] / OUTPUT_ZIP_NAME
+    conn = sqlite3.connect(paths["sqlite"])
+    try:
+        export_zip(conn, zip_path, progress=progress)
+    finally:
+        conn.close()
+    write_catalog(paths, remote, OUTPUT_ZIP_NAME)
+    sync_load_zip(paths["root"], OUTPUT_ZIP_NAME)
+
+
+def run_export(paths, progress=False, log=None, force=False):
+    ensure_dirs(paths)
+    remote = supply.list_all_products()
+    sources = load_sources(paths["sources"])
+    zip_path = paths["load"] / OUTPUT_ZIP_NAME
+    sqlite_ok = paths["sqlite"].is_file()
+    zip_ok = zip_path.is_file()
+    if force:
+        _remote, gpkgs = supply.fetch_extract(
+            paths, progress=progress, log=log, force=True, remote=remote
+        )
+        _rematch_and_write(paths, gpkgs, remote, progress=progress)
+        return 0
+    if skip_all_downloads(paths, remote, sources):
+        if log is not None:
+            log.write("already present, md5 match: load and sqlite current\n")
+        return 0
+    catalog_ok = md5s_current(remote, sources)
+    if catalog_ok and not sqlite_ok and zip_ok:
+        if log is not None:
+            log.write("rebuild sqlite from load zip\n")
+        import_zip(zip_path, paths["sqlite"], progress=progress)
+        write_catalog(paths, remote, OUTPUT_ZIP_NAME)
+        return 0
+    if catalog_ok and sqlite_ok and not zip_ok:
+        if log is not None:
+            log.write("write load zip from sqlite\n")
+        _write_zip_from_sqlite(paths, remote, progress=progress)
+        return 0
+    _remote, gpkgs = supply.fetch_extract(
+        paths, progress=progress, log=log, force=False, remote=remote
+    )
+    _rematch_and_write(paths, gpkgs, remote, progress=progress)
     return 0
 
 
 def run_import(paths, progress=False):
     ensure_dirs(paths)
     zip_path = paths["load"] / OUTPUT_ZIP_NAME
-    download_zip(LOAD_ZIP_URL, zip_path, progress=progress)
+    supply.download_zip(LOAD_ZIP_URL, zip_path, progress=progress)
     import_zip(zip_path, paths["sqlite"], progress=progress)
     return 0

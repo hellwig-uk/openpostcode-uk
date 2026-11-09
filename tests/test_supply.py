@@ -18,6 +18,7 @@ from openpostcode.supply import (
     list_all_products,
     list_product,
     load_sources,
+    md5s_current,
     save_sources,
     skip_all_downloads,
     unzip_gpkg,
@@ -211,6 +212,8 @@ class SupplyTests(unittest.TestCase):
         self.assertFalse(skip_all_downloads(self.paths, remote, sources))
         sources["open_roads"]["md5"] = "bb"
         self.assertTrue(skip_all_downloads(self.paths, remote, sources))
+        self.assertTrue(md5s_current(remote, sources))
+        self.assertFalse(md5s_current({}, sources))
 
         gpkg = write_roads_gpkg(self.root / "oproad_gb.gpkg", sample_roads())
         zpath = zip_gpkg(gpkg, self.paths["extract"] / "oproad_gpkg_gb.zip")
@@ -259,6 +262,35 @@ class SupplyTests(unittest.TestCase):
             )
         download.assert_not_called()
         self.assertTrue(unzipped_gpkg.is_file())
+        with mock.patch("openpostcode.supply.file_md5") as hashed:
+            trusted_zip, trusted_gpkg = ensure_product(
+                self.paths,
+                "open_roads",
+                remote_item,
+                progress=False,
+                log=io.StringIO(),
+                recorded_md5=digest,
+            )
+        hashed.assert_not_called()
+        self.assertTrue(trusted_gpkg.is_file())
+        ensure_product(
+            self.paths,
+            "open_roads",
+            remote_item,
+            progress=False,
+            log=None,
+            recorded_md5=digest,
+        )
+        with mock.patch("openpostcode.supply._download_and_verify") as refresh:
+            refresh.side_effect = lambda *a, **k: None
+            ensure_product(
+                self.paths,
+                "open_roads",
+                {**remote_item, "md5": "11" * 16},
+                progress=False,
+                recorded_md5="aa" * 16,
+            )
+        refresh.assert_called()
         with mock.patch("openpostcode.supply.gpkg_beside", return_value=None):
             with mock.patch("openpostcode.supply.unzip_gpkg", return_value=[]):
                 with self.assertRaises(FileNotFoundError):
@@ -303,19 +335,24 @@ class SupplyTests(unittest.TestCase):
                 "list_url": "https://list/r",
             },
         }
+        names_zip = self.paths["extract"] / "opname_gpkg_gb.zip"
+        roads_zip = self.paths["extract"] / "oproad_gpkg_gb.zip"
+        names_zip.write_bytes(b"z")
+        roads_zip.write_bytes(b"z")
+        (self.paths["extract"] / "opname_gb.gpkg").write_bytes(b"g")
+        (self.paths["extract"] / "oproad_gb.gpkg").write_bytes(b"g")
         log = io.StringIO()
         with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
-            listed, gpkgs = fetch_extract(self.paths, progress=False, log=log)
-        self.assertIs(gpkgs, False)
-        self.assertIn("load and sqlite current", log.getvalue())
-        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
-            listed, gpkgs = fetch_extract(self.paths, progress=False, log=None)
-        self.assertIs(gpkgs, False)
+            with mock.patch("openpostcode.supply.download_zip") as download:
+                with mock.patch("openpostcode.supply.file_md5") as hashed:
+                    listed, gpkgs = fetch_extract(self.paths, progress=False, log=log)
         self.assertEqual(listed, remote)
-        dummy_zip = self.paths["extract"] / "opname_gpkg_gb.zip"
+        download.assert_not_called()
+        hashed.assert_not_called()
+        self.assertTrue(gpkgs["open_names"]["gpkg"].is_file())
+        self.assertIn("md5 match", log.getvalue())
+        dummy_zip = names_zip
         dummy_gpkg = self.paths["extract"] / "opname_gb.gpkg"
-        dummy_zip.write_bytes(b"z")
-        dummy_gpkg.write_bytes(b"g")
         with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             with mock.patch(
                 "openpostcode.supply.ensure_product",
@@ -325,6 +362,12 @@ class SupplyTests(unittest.TestCase):
                     self.paths, progress=False, log=io.StringIO(), force=True
                 )
         self.assertIsNot(gpkgs, False)
+        self.assertEqual(ensure.call_count, 2)
+        with mock.patch(
+            "openpostcode.supply.ensure_product",
+            return_value=(dummy_zip, dummy_gpkg),
+        ) as ensure:
+            fetch_extract(self.paths, progress=False, log=None, remote=remote)
         self.assertEqual(ensure.call_count, 2)
 
         self.paths["sqlite"].unlink()
@@ -378,3 +421,26 @@ class SupplyTests(unittest.TestCase):
             with mock.patch("openpostcode.supply.gpkg_beside", return_value=None):
                 with self.assertRaises(FileNotFoundError):
                     ensure_product(self.paths, "open_names", remote_item)
+
+    def test_ensure_redownloads_when_local_hash_differs(self):
+        stale = self.paths["extract"] / "opname_gpkg_gb.zip"
+        stale.write_bytes(b"stale")
+        names = write_names_gpkg(self.root / "fresh_names.gpkg", sample_names())
+        fresh = zip_gpkg(names, self.root / "fresh.zip")
+        digest = file_md5(fresh)
+        remote_item = {
+            "fileName": "opname_gpkg_gb.zip",
+            "md5": digest,
+            "size": fresh.stat().st_size,
+            "url": "https://blob",
+        }
+
+        def fake_download(url, dest, expected_size=None, progress=False):
+            Path(dest).write_bytes(fresh.read_bytes())
+
+        with mock.patch("openpostcode.supply.download_zip", fake_download):
+            zip_out, gpkg_out = ensure_product(
+                self.paths, "open_names", remote_item, progress=False
+            )
+        self.assertTrue(gpkg_out.is_file())
+        self.assertEqual(file_md5(zip_out), digest)

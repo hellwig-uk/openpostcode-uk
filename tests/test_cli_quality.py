@@ -116,12 +116,12 @@ class QualityCliTests(unittest.TestCase):
     def test_hoist_global_options(self):
         self.assertEqual(hoist_global_options(["--etl-dir", "x"]), ["--etl-dir", "x"])
         self.assertEqual(
-            hoist_global_options(["build", "--force"]),
-            ["--force", "build"],
+            hoist_global_options(["export", "--force"]),
+            ["--force", "export"],
         )
         self.assertEqual(
-            hoist_global_options(["build", "--etl-dir", "x", "--force"]),
-            ["--etl-dir", "x", "--force", "build"],
+            hoist_global_options(["export", "--etl-dir", "x", "--force"]),
+            ["--etl-dir", "x", "--force", "export"],
         )
         self.assertEqual(
             hoist_global_options(["get", "--etl-dir=foo", "SW1A", "1AA"]),
@@ -142,3 +142,6 @@ class QualityCliTests(unittest.TestCase):
         with mock.patch("openpostcode.cli.cmd_import", return_value=0) as imported:
             self.assertEqual(main(["import"], progress=False), 0)
             imported.assert_called_once()
+        with mock.patch("openpostcode.cli.cmd_export", return_value=0) as exported:
+            self.assertEqual(main(["export"], progress=False), 0)
+            exported.assert_called_once()

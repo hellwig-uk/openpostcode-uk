@@ -87,7 +87,7 @@ class StoreLookupTests(unittest.TestCase):
         self.assertEqual(err, "postcode not found")
         code, out, err = lookup(self.root / "missing.sqlite", ["SW1A1AA"])
         self.assertEqual(code, 1)
-        self.assertEqual(err, "sqlite not found; run build or import")
+        self.assertEqual(err, "sqlite not found; run export or import")
 
         conn = sqlite3.connect(sqlite)
         conn.execute("DELETE FROM location WHERE postcode = 'EMPTY1'")
