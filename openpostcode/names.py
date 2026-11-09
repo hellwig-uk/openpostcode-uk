@@ -1,12 +1,12 @@
 """Display-name and postcode normalisation."""
 
-import pandas as pd
-
 
 def is_blank(value):
     if value is None:
         return True
     try:
+        import pandas as pd
+
         if pd.isna(value):
             return True
     except TypeError, ValueError:

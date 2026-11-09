@@ -1,23 +1,37 @@
 [project]
-name = "openpostcode"
-version = "0.1.0"
+name = "openpostcodeuk"
+version = "1.2026.1"
 description = "UK postcode nearest roads and landmarks from OS Open Names and OS Open Roads"
-requires-python = ">=3.14"
-dependencies = [
-    "geopandas>=1.0",
-    "pyogrio",
-    "tqdm",
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Martin P. Hellwig", email = "martin@hellwig.uk" },
 ]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/hellwig-uk/openpostcode-uk"
+Repository = "https://github.com/hellwig-uk/openpostcode-uk"
+
+[project.scripts]
+openpostcode_uk = "openpostcodeuk.cli:main"
 
 [project.optional-dependencies]
 dev = [
+    "geopandas>=1.0",
+    "pyogrio",
+    "tqdm",
     "black",
     "isort",
     "coverage",
 ]
 
 [tool.setuptools]
-packages = ["openpostcode"]
+packages = ["openpostcode", "openpostcodeuk"]
+
+[tool.setuptools.package-data]
+openpostcodeuk = ["data/*"]
 
 [tool.black]
 line-length = 88
@@ -26,11 +40,11 @@ target-version = ["py314"]
 [tool.isort]
 profile = "black"
 line_length = 88
-known_first_party = ["openpostcode"]
+known_first_party = ["openpostcode", "openpostcodeuk"]
 
 [tool.coverage.run]
 branch = true
-source = ["openpostcode"]
+source = ["openpostcode", "openpostcodeuk"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

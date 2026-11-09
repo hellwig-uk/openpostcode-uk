@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 from zipfile import ZipFile
@@ -13,15 +14,19 @@ from openpostcode.supply import (
     download_zip,
     ensure_product,
     fetch_extract,
+    fetch_json,
     file_md5,
     gpkg_beside,
     list_all_products,
     list_product,
     load_sources,
     md5s_current,
+    package_version,
     save_sources,
     skip_all_downloads,
     unzip_gpkg,
+    write_project_version,
+    zip_last_modified,
 )
 from tests.common import (
     sample_names,
@@ -444,3 +449,67 @@ class SupplyTests(unittest.TestCase):
             )
         self.assertTrue(gpkg_out.is_file())
         self.assertEqual(file_md5(zip_out), digest)
+
+    def test_fetch_json(self):
+        body = json.dumps({"ok": 1}).encode()
+        with mock.patch(
+            "urllib.request.urlopen",
+            lambda req, timeout=None: FakeResponse(body),
+        ):
+            self.assertEqual(fetch_json("https://example/s.json"), {"ok": 1})
+
+    def test_package_version_from_last_modified(self):
+        def opener(req, timeout=None):
+            self.assertEqual(req.get_method(), "HEAD")
+            if req.full_url.endswith("/late"):
+                stamp = "Sun, 01 Nov 2026 00:00:00 GMT"
+            else:
+                stamp = "Thu, 15 Oct 2026 12:00:00 GMT"
+            return FakeResponse(b"", headers={"Last-Modified": stamp})
+
+        remote = {
+            "open_names": {"url": "https://blob/late"},
+            "open_roads": {"url": "https://blob/early"},
+            "skip": {},
+        }
+        with mock.patch("urllib.request.urlopen", opener):
+            self.assertEqual(package_version(remote), "1.2026.305")
+        with mock.patch(
+            "urllib.request.urlopen",
+            lambda req, timeout=None: FakeResponse(b"", headers={}),
+        ):
+            with self.assertRaises(ValueError):
+                zip_last_modified("https://blob")
+        with mock.patch("openpostcode.supply.zip_last_modified") as stamped:
+            stamped.return_value = datetime(2026, 10, 15, 12, 0, 0)
+            self.assertEqual(
+                package_version({"open_names": {"url": "https://blob"}}),
+                "1.2026.288",
+            )
+        with self.assertRaises(ValueError):
+            package_version({"open_names": {}})
+        with mock.patch(
+            "urllib.request.urlopen",
+            lambda req, timeout=None: FakeResponse(
+                b"", headers={"Last-Modified": "Thu, 15 Oct 2026 12:00:00"}
+            ),
+        ):
+            with mock.patch(
+                "openpostcode.supply.parsedate_to_datetime",
+                return_value=datetime(2026, 10, 15, 12, 0, 0),
+            ):
+                stamp = zip_last_modified("https://blob")
+        self.assertEqual(stamp.tzinfo, timezone.utc)
+
+    def test_write_project_version(self):
+        path = self.root / "pyproject.toml"
+        path.write_text('[project]\nversion = "1.0.0"\nname = "x"\n')
+        write_project_version(path, "1.2026.288")
+        self.assertEqual(
+            path.read_text(),
+            '[project]\nversion = "1.2026.288"\nname = "x"\n',
+        )
+        empty = self.root / "empty.toml"
+        empty.write_text("[project]\n")
+        with self.assertRaises(ValueError):
+            write_project_version(empty, "1.2026.1")

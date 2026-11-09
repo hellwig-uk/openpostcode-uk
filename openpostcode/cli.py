@@ -9,7 +9,7 @@ from openpostcode.export import run_export, run_import
 from openpostcode.lookup import lookup
 from openpostcode.paths import etl_paths
 
-QUALITY_PATHS = ("openpostcode", "tests", "main.py", "get.py")
+QUALITY_PATHS = ("openpostcode", "openpostcodeuk", "tests", "main.py", "get.py")
 _COMMANDS = {"export", "get", "format", "test", "import"}
 _VALUE_FLAGS = {"--etl-dir"}
 _BARE_FLAGS = {"--force"}
@@ -94,9 +94,9 @@ def cmd_export(etl_dir, progress=True, log=None, force=False):
     return run_export(paths, progress=progress, log=log, force=force)
 
 
-def cmd_import(etl_dir, progress=True):
+def cmd_import(etl_dir, progress=True, log=None):
     paths = etl_paths(etl_dir)
-    return run_import(paths, progress=progress)
+    return run_import(paths, progress=progress, log=log)
 
 
 def repo_root():
@@ -182,7 +182,7 @@ def main(argv=None, stdout=None, stderr=None, progress=None):
     if args.command == "test":
         return cmd_test(stdout, stderr)
     if args.command == "import":
-        return cmd_import(args.etl_dir, progress=use_progress)
+        return cmd_import(args.etl_dir, progress=use_progress, log=stderr)
     return cmd_export(
         args.etl_dir,
         progress=use_progress,

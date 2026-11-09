@@ -2,9 +2,12 @@
 
 import hashlib
 import json
+import re
 import sys
 import urllib.request
 import zipfile
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from tqdm import tqdm
@@ -61,8 +64,57 @@ def save_sources(path, payload):
         handle.write("\n")
 
 
-def _request(url):
-    return urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+def _request(url, method="GET"):
+    return urllib.request.Request(
+        url, headers={"User-Agent": USER_AGENT}, method=method
+    )
+
+
+def fetch_json(url):
+    with urllib.request.urlopen(_request(url)) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def zip_last_modified(url):
+    with urllib.request.urlopen(_request(url, method="HEAD")) as response:
+        raw = response.headers.get("Last-Modified")
+    if not raw:
+        raise ValueError(f"no Last-Modified for {url}")
+    parsed = parsedate_to_datetime(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def package_version(remote):
+    latest = None
+    for item in remote.values():
+        url = item.get("url")
+        if not url:
+            continue
+        stamp = zip_last_modified(url)
+        if latest is None or stamp > latest:
+            latest = stamp
+    if latest is None:
+        raise ValueError("no Last-Modified on OS product zips")
+    return f"1.{latest.year}.{latest.timetuple().tm_yday}"
+
+
+def write_project_version(path, version):
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    out = []
+    replaced = False
+    for line in lines:
+        if not replaced and re.match(r"^version\s*=", line):
+            out.append(f'version = "{version}"\n')
+            replaced = True
+        else:
+            out.append(line)
+    if not replaced:
+        raise ValueError(f"no version field in {path}")
+    path.write_text("".join(out), encoding="utf-8")
+    return version
 
 
 def list_product(list_url):

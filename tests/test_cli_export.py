@@ -8,12 +8,12 @@ from unittest import mock
 from zipfile import ZipFile
 
 from openpostcode.cli import main, main_get
-from openpostcode.export import run_export
+from openpostcode.export import _sync_repo_outputs, run_export, run_import
 from openpostcode.extract import read_landmarks, read_postcodes, read_roads
 from openpostcode.match import features_for_point
 from openpostcode.paths import OUTPUT_ZIP_NAME, etl_paths
 from openpostcode.store import LOAD_ZIP_URL, connect, export_zip, write_rows
-from openpostcode.supply import file_md5
+from openpostcode.supply import file_md5, load_sources
 from tests.common import (
     sample_names,
     sample_roads,
@@ -39,6 +39,11 @@ class CliExportTests(unittest.TestCase):
         self.rz = zip_gpkg(
             self.roads, self.root / "oproad_gpkg_gb.zip", arcname="oproad_gb.gpkg"
         )
+        self._version = mock.patch(
+            "openpostcode.supply.package_version", return_value="1.2026.288"
+        )
+        self._version.start()
+        self.addCleanup(self._version.stop)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -386,13 +391,14 @@ class CliExportTests(unittest.TestCase):
             self.assertEqual(url, LOAD_ZIP_URL)
             Path(dest).write_bytes(zpath.read_bytes())
 
-        with mock.patch("openpostcode.supply.download_zip", fake_download):
-            code = main(
-                ["--etl-dir", str(self.etl), "import"],
-                progress=False,
-                stdout=io.StringIO(),
-                stderr=io.StringIO(),
-            )
+        with mock.patch("openpostcode.supply.fetch_json", return_value={}):
+            with mock.patch("openpostcode.supply.download_zip", fake_download):
+                code = main(
+                    ["--etl-dir", str(self.etl), "import"],
+                    progress=False,
+                    stdout=io.StringIO(),
+                    stderr=io.StringIO(),
+                )
         self.assertEqual(code, 0)
         out = io.StringIO()
         code = main(
@@ -403,6 +409,24 @@ class CliExportTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
         self.assertIn("The Palace", out.getvalue())
+
+    def test_import_skips_when_published_current(self):
+        remote = self._remote()
+        self.assertEqual(self._export_once(remote), 0)
+        local = load_sources(self.paths["sources"])
+        with mock.patch("openpostcode.supply.fetch_json", return_value=local):
+            with mock.patch("openpostcode.supply.download_zip") as download:
+                log = io.StringIO()
+                code = main(
+                    ["--etl-dir", str(self.etl), "import"],
+                    progress=False,
+                    stdout=io.StringIO(),
+                    stderr=log,
+                )
+                self.assertEqual(code, 0)
+                download.assert_not_called()
+                self.assertIn("published export current", log.getvalue())
+                self.assertEqual(run_import(self.paths, progress=False, log=None), 0)
 
     def test_export_force_flag(self):
         with mock.patch("openpostcode.cli.cmd_export", return_value=0) as fn:
@@ -415,3 +439,40 @@ class CliExportTests(unittest.TestCase):
                 main(["--etl-dir", str(self.etl), "export"])
                 self.assertTrue(fn.call_args.kwargs["progress"])
                 self.assertFalse(fn.call_args.kwargs["force"])
+
+    def test_sync_repo_outputs(self):
+        remote = self._remote()
+        self.assertEqual(self._export_once(remote), 0)
+        sources = load_sources(self.paths["sources"])
+        self.assertEqual(sources["package_version"], "1.2026.288")
+        with mock.patch("openpostcode.export._repo_root", return_value=None):
+            _sync_repo_outputs(self.paths, "1.2026.288")
+        other = self.root / "other"
+        other.mkdir()
+        with mock.patch("openpostcode.export._repo_root", return_value=other):
+            _sync_repo_outputs(self.paths, "1.2026.288")
+        top = self.root / "repo"
+        etl = top / "etl"
+        (etl / "load").mkdir(parents=True)
+        (top / "openpostcodeuk" / "data").mkdir(parents=True)
+        (top / "pyproject.toml").write_text(
+            '[project]\nversion = "1.0.0"\nname = "openpostcodeuk"\n'
+        )
+        repo_paths = etl_paths(etl)
+        zpath = repo_paths["load"] / OUTPUT_ZIP_NAME
+        zpath.write_bytes(b"zip-bytes")
+        with mock.patch("openpostcode.export._repo_root", return_value=top):
+            with mock.patch("openpostcode.export.sync_load_zip"):
+                _sync_repo_outputs(repo_paths, "1.2026.305")
+        copied = top / "openpostcodeuk" / "data" / OUTPUT_ZIP_NAME
+        self.assertEqual(copied.read_bytes(), b"zip-bytes")
+        self.assertIn('version = "1.2026.305"', (top / "pyproject.toml").read_text())
+        zpath.unlink()
+        with mock.patch("openpostcode.export._repo_root", return_value=top):
+            with mock.patch("openpostcode.export.sync_load_zip"):
+                _sync_repo_outputs(repo_paths, "1.2026.305")
+        (top / "pyproject.toml").unlink()
+        zpath.write_bytes(b"zip-bytes")
+        with mock.patch("openpostcode.export._repo_root", return_value=top):
+            with mock.patch("openpostcode.export.sync_load_zip"):
+                _sync_repo_outputs(repo_paths, "1.2026.1")
