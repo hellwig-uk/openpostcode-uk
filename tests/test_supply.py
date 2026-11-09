@@ -460,12 +460,13 @@ class SupplyTests(unittest.TestCase):
 
     def test_package_version_from_last_modified(self):
         def opener(req, timeout=None):
-            self.assertEqual(req.get_method(), "HEAD")
+            self.assertEqual(req.get_method(), "GET")
+            self.assertEqual(req.get_header("Range"), "bytes=0-0")
             if req.full_url.endswith("/late"):
                 stamp = "Sun, 01 Nov 2026 00:00:00 GMT"
             else:
                 stamp = "Thu, 15 Oct 2026 12:00:00 GMT"
-            return FakeResponse(b"", headers={"Last-Modified": stamp})
+            return FakeResponse(b"x", headers={"Last-Modified": stamp})
 
         remote = {
             "open_names": {"url": "https://blob/late"},

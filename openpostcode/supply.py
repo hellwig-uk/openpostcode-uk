@@ -64,10 +64,11 @@ def save_sources(path, payload):
         handle.write("\n")
 
 
-def _request(url, method="GET"):
-    return urllib.request.Request(
-        url, headers={"User-Agent": USER_AGENT}, method=method
-    )
+def _request(url, method="GET", extra=None):
+    headers = {"User-Agent": USER_AGENT}
+    if extra:
+        headers.update(extra)
+    return urllib.request.Request(url, headers=headers, method=method)
 
 
 def fetch_json(url):
@@ -76,8 +77,10 @@ def fetch_json(url):
 
 
 def zip_last_modified(url):
-    with urllib.request.urlopen(_request(url, method="HEAD")) as response:
+    req = _request(url, extra={"Range": "bytes=0-0"})
+    with urllib.request.urlopen(req) as response:
         raw = response.headers.get("Last-Modified")
+        response.read()
     if not raw:
         raise ValueError(f"no Last-Modified for {url}")
     parsed = parsedate_to_datetime(raw)
