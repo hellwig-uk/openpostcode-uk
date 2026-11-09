@@ -35,7 +35,7 @@ dev = [
 packages = ["openpostcode", "openpostcodeuk"]
 
 [tool.setuptools.package-data]
-openpostcodeuk = ["data/*"]
+openpostcodeuk = ["data/openpostcode_uk.zip"]
 
 [tool.black]
 line-length = 88

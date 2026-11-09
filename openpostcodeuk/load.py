@@ -1,23 +1,36 @@
-"""Locate the bundled lookup database and materialise sqlite."""
+"""Locate the bundled lookup zip and materialise sqlite in a local cache."""
 
 import importlib.metadata
 import os
-import tempfile
+import sys
+import tomllib
 from importlib.resources import as_file, files
 from pathlib import Path
 
 from openpostcode.paths import OUTPUT_ZIP_NAME
 from openpostcode.tables import import_zip
 
+CACHE_ENV = "OPENPOSTCODEUK_CACHE"
 SKIP_IMPORT_ENV = "OPENPOSTCODEUK_SKIP_IMPORT"
-SQLITE_NAME = "lookup.sqlite"
 
 
-def _distribution_version():
+def _declared_version():
     try:
         return importlib.metadata.version("openpostcodeuk")
     except importlib.metadata.PackageNotFoundError:
-        return "unknown"
+        pass
+    version = _pyproject_version()
+    if version:
+        return version
+    return "unknown"
+
+
+def _pyproject_version(start=None):
+    path = (Path.cwd() if start is None else Path(start)) / "pyproject.toml"
+    if not path.is_file():
+        return None
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    return data.get("project", {}).get("version")
 
 
 def _usable_file(path):
@@ -46,48 +59,41 @@ def _repo_zip():
     return None
 
 
-def _installed_sqlite():
-    path = Path(__file__).resolve().parent / "data" / SQLITE_NAME
-    if _usable_file(path):
-        return path
-    return None
+def _cache_dir():
+    override = os.environ.get(CACHE_ENV, "").strip()
+    if override:
+        return Path(override)
+    xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
+    if xdg:
+        return Path(xdg) / "openpostcodeuk"
+    return Path.home() / ".cache" / "openpostcodeuk"
 
 
 def _cache_path(key):
-    root = Path(tempfile.gettempdir()) / "openpostcodeuk"
+    root = _cache_dir()
     root.mkdir(parents=True, exist_ok=True)
     return root / f"{key}.sqlite"
 
 
-def _sqlite_from_zip(zip_path, key):
+def _sqlite_from_zip(zip_path, key, log=None):
     dest = _cache_path(key)
-    if dest.is_file():
+    if _usable_file(dest):
         return dest
-    import_zip(zip_path, dest)
+    if log is not None:
+        log.write("Importing lookup database from CSV zip (once per version)...\n")
+        log.flush()
+    tmp = dest.with_name(dest.name + ".partial")
+    import_zip(zip_path, tmp)
+    tmp.replace(dest)
+    if log is not None:
+        log.write("Lookup database ready.\n")
+        log.flush()
     return dest
 
 
 def should_import_during_build():
     value = os.environ.get(SKIP_IMPORT_ENV, "").strip().lower()
     return value not in {"1", "true", "yes"}
-
-
-def import_into_data_dir(data_dir, log=None):
-    data_dir = Path(data_dir)
-    sqlite_path = data_dir / SQLITE_NAME
-    zip_path = data_dir / OUTPUT_ZIP_NAME
-    if _usable_file(sqlite_path):
-        if log is not None:
-            log.write("lookup.sqlite already present\n")
-        return sqlite_path
-    if not _usable_file(zip_path):
-        return None
-    if log is not None:
-        log.write("Importing lookup database (one-time install step)...\n")
-    import_zip(zip_path, sqlite_path)
-    if log is not None:
-        log.write("Lookup database ready.\n")
-    return sqlite_path
 
 
 def run_build_import(build_lib, log=None, editable=False):
@@ -97,20 +103,21 @@ def run_build_import(build_lib, log=None, editable=False):
         if log is not None:
             log.write("skipping lookup import (OPENPOSTCODEUK_SKIP_IMPORT)\n")
         return None
-    data_dir = Path(build_lib) / "openpostcodeuk" / "data"
-    return import_into_data_dir(data_dir, log=log)
+    zip_path = Path(build_lib) / "openpostcodeuk" / "data" / OUTPUT_ZIP_NAME
+    if not _usable_file(zip_path):
+        return None
+    return _sqlite_from_zip(zip_path, _declared_version(), log=log)
 
 
-def ensure_sqlite():
-    installed = _installed_sqlite()
-    if installed is not None:
-        return installed
+def ensure_sqlite(log=None):
+    if log is None:
+        log = sys.stderr
     ref = _package_zip()
     if ref is not None:
         with as_file(ref) as zip_path:
-            return _sqlite_from_zip(Path(zip_path), _distribution_version())
+            return _sqlite_from_zip(Path(zip_path), _declared_version(), log=log)
     repo = _repo_zip()
     if repo is not None:
         key = f"{repo.stat().st_mtime_ns}-{repo.stat().st_size}"
-        return _sqlite_from_zip(repo, key)
+        return _sqlite_from_zip(repo, key, log=log)
     raise FileNotFoundError("openpostcode_uk.zip not found")

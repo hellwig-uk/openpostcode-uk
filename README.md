@@ -280,7 +280,7 @@ opuk.get("SW1A 1AA")
 
 This is the path for application code. The data file is part of the package (and of git). You do not run the matcher.
 
-The committed artefact is `etl/load/openpostcode_uk.zip`: three CSVs (`postcode.csv`, `feature.csv`, `location.csv`) that are 1:1 with the sqlite tables. A daily GitHub Action lists OS Open Names and Open Roads. When either zip md5 differs from `etl/sources.json`, it runs export, commits that zip plus `sources.json`, copies the zip into `openpostcodeuk/data/openpostcode_uk.zip` for the wheel, sets version `1.{year}.{day-of-year}` from the latest OS zip `Last-Modified`, and tags `v1.{year}.{yday}`. Git history is the version of the data.
+The committed artefact is `etl/load/openpostcode_uk.zip`: three CSVs (`postcode.csv`, `feature.csv`, `location.csv`) that are 1:1 with the sqlite tables. A daily GitHub Action lists OS Open Names and Open Roads. When either zip md5 differs from `etl/sources.json`, it runs export, commits that zip plus `sources.json`, copies the zip into `openpostcodeuk/data/openpostcode_uk.zip` for the wheel, sets version `1.{year}.{day-of-year}` from the latest OS zip `Last-Modified`, and tags `v1.{year}.{yday}`. That tag dispatches `publish.yml`, which uploads the CSV-zip wheel and sdist to PyPI with Trusted Publishing (GitHub environment `pypi`). Git history is the version of the data.
 
 ```bash
 python -m pip install openpostcodeuk
@@ -293,7 +293,7 @@ import openpostcodeuk as opuk
 opuk.get("SE1 9SG")
 ```
 
-Default install is stdlib only. `pip install` builds a wheel and **imports the CSV zip into sqlite as part of that build** (several minutes, once). After that, `opuk.get` and `openpostcode_uk` open the packaged `lookup.sqlite` and return immediately. There is no GitHub fetch at lookup time and no geopandas. Set `OPENPOSTCODEUK_SKIP_IMPORT=1` to skip the import (editable/dev installs that only need the ETL tools).
+Default install is stdlib only. The wheel ships `openpostcode_uk.zip` (the three table CSVs). `pip install` from source imports that zip into a local sqlite cache (several minutes, once per version). A pre-built wheel does the same import on the first `opuk.get` / `openpostcode_uk` call. Later lookups open the cache and return immediately. Cache directory is `$OPENPOSTCODEUK_CACHE`, else `$XDG_CACHE_HOME/openpostcodeuk`, else `~/.cache/openpostcodeuk`. There is no GitHub fetch at lookup time and no geopandas. Set `OPENPOSTCODEUK_SKIP_IMPORT=1` to skip the install-time import (editable/dev installs and the export Action).
 
 From a clone, the same lookup without a wheel install still needs that zip (from git, or after `export` / `import`). Then:
 

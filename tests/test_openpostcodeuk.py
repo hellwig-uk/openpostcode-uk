@@ -15,13 +15,14 @@ from openpostcode.tables import import_zip
 from openpostcodeuk.api import FEATURE_KEYS, get
 from openpostcodeuk.cli import main
 from openpostcodeuk.load import (
-    _distribution_version,
-    _installed_sqlite,
+    CACHE_ENV,
+    _cache_dir,
+    _declared_version,
     _package_zip,
+    _pyproject_version,
     _repo_root_dir,
     _repo_zip,
     ensure_sqlite,
-    import_into_data_dir,
     run_build_import,
     should_import_during_build,
 )
@@ -113,32 +114,34 @@ class OpenpostcodeukTests(unittest.TestCase):
     def test_ensure_sqlite_from_repo_zip_and_cache(self):
         imported = import_zip(self.zip_path, self.root / "fromzip.sqlite")
         self.assertTrue(Path(imported).is_file())
-        with mock.patch("openpostcodeuk.load._installed_sqlite", return_value=None):
+        cache = self.root / "cache"
+        log = io.StringIO()
+        with mock.patch.dict("os.environ", {CACHE_ENV: str(cache)}):
             with mock.patch("openpostcodeuk.load._package_zip", return_value=None):
                 with mock.patch(
                     "openpostcodeuk.load._repo_zip", return_value=self.zip_path
                 ):
-                    first = ensure_sqlite()
+                    first = ensure_sqlite(log=log)
                     second = ensure_sqlite()
             self.assertEqual(first, second)
             self.assertTrue(first.is_file())
+            self.assertEqual(first.parent, cache)
+            self.assertIn("once per version", log.getvalue())
+            self.assertIn("Lookup database ready", log.getvalue())
             with mock.patch(
                 "openpostcodeuk.load._package_zip", return_value=self.zip_path
             ):
                 with mock.patch(
-                    "openpostcodeuk.load._distribution_version",
+                    "openpostcodeuk.load._declared_version",
                     return_value="test-zip",
                 ):
-                    packed = ensure_sqlite()
+                    packed = ensure_sqlite(log=io.StringIO())
             self.assertTrue(packed.is_file())
+            self.assertEqual(packed.name, "test-zip.sqlite")
             with mock.patch("openpostcodeuk.load._package_zip", return_value=None):
                 with mock.patch("openpostcodeuk.load._repo_zip", return_value=None):
                     with self.assertRaises(FileNotFoundError):
-                        ensure_sqlite()
-        with mock.patch(
-            "openpostcodeuk.load._installed_sqlite", return_value=self.sqlite
-        ):
-            self.assertEqual(ensure_sqlite(), self.sqlite)
+                        ensure_sqlite(log=io.StringIO())
 
     def test_package_zip_errors_and_empty(self):
         class Boom:
@@ -201,43 +204,88 @@ class OpenpostcodeukTests(unittest.TestCase):
             "openpostcodeuk.load.importlib.metadata.version",
             side_effect=importlib.metadata.PackageNotFoundError,
         ):
-            self.assertEqual(_distribution_version(), "unknown")
-        self.assertIsInstance(_distribution_version(), str)
+            with mock.patch(
+                "openpostcodeuk.load._pyproject_version", return_value=None
+            ):
+                self.assertEqual(_declared_version(), "unknown")
+        self.assertIsInstance(_declared_version(), str)
         self.assertTrue(_repo_root_dir().is_dir())
 
-    def test_import_into_data_dir_and_build_hook(self):
-        data = self.root / "openpostcodeuk" / "data"
-        data.mkdir(parents=True)
-        self.assertIsNone(import_into_data_dir(data, log=None))
-        shutil.copy2(self.zip_path, data / "openpostcode_uk.zip")
-        log = io.StringIO()
-        built = import_into_data_dir(data, log=log)
-        self.assertTrue(built.is_file())
-        self.assertIn("one-time install step", log.getvalue())
-        log2 = io.StringIO()
-        again = import_into_data_dir(data, log=log2)
-        self.assertEqual(again, built)
-        self.assertIn("already present", log2.getvalue())
-        self.assertEqual(import_into_data_dir(data, log=None), built)
+    def test_pyproject_version_and_cache_dir(self):
+        missing = self.root / "empty"
+        missing.mkdir()
+        self.assertIsNone(_pyproject_version(missing))
+        toml = self.root / "pyproject.toml"
+        toml.write_text("[project]\nname = 'x'\n", encoding="utf-8")
+        self.assertIsNone(_pyproject_version(self.root))
+        toml.write_text("[project]\nversion = '9.9.9'\n", encoding="utf-8")
+        self.assertEqual(_pyproject_version(self.root), "9.9.9")
+        with mock.patch("openpostcodeuk.load.Path.cwd", return_value=self.root):
+            self.assertEqual(_pyproject_version(), "9.9.9")
+        with mock.patch(
+            "openpostcodeuk.load.importlib.metadata.version",
+            side_effect=importlib.metadata.PackageNotFoundError,
+        ):
+            with mock.patch(
+                "openpostcodeuk.load._pyproject_version", return_value="1.2.3"
+            ):
+                self.assertEqual(_declared_version(), "1.2.3")
+        xdg = self.root / "xdg"
+        home = self.root / "home"
+        with mock.patch.dict(
+            "os.environ",
+            {CACHE_ENV: "", "XDG_CACHE_HOME": str(xdg)},
+        ):
+            self.assertEqual(_cache_dir(), xdg / "openpostcodeuk")
+        with mock.patch.dict(
+            "os.environ",
+            {CACHE_ENV: "", "XDG_CACHE_HOME": ""},
+        ):
+            with mock.patch("openpostcodeuk.load.Path.home", return_value=home):
+                self.assertEqual(_cache_dir(), home / ".cache" / "openpostcodeuk")
+        named = self.root / "named-cache"
+        with mock.patch.dict("os.environ", {CACHE_ENV: str(named)}):
+            self.assertEqual(_cache_dir(), named)
 
+    def test_build_hook_warms_cache_without_packing_sqlite(self):
         build_lib = self.root / "build" / "lib"
         dest = build_lib / "openpostcodeuk" / "data"
         dest.mkdir(parents=True)
+        cache = self.root / "install-cache"
+        self.assertIsNone(run_build_import(build_lib, log=None, editable=False))
         shutil.copy2(self.zip_path, dest / "openpostcode_uk.zip")
         self.assertIsNone(run_build_import(build_lib, log=None, editable=True))
-        with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": "1"}):
+        with mock.patch.dict(
+            "os.environ",
+            {CACHE_ENV: str(cache), "OPENPOSTCODEUK_SKIP_IMPORT": "1"},
+        ):
             self.assertFalse(should_import_during_build())
             skip_log = io.StringIO()
             self.assertIsNone(run_build_import(build_lib, log=skip_log))
             self.assertIn("OPENPOSTCODEUK_SKIP_IMPORT", skip_log.getvalue())
             self.assertIsNone(run_build_import(build_lib, log=None))
-        with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": ""}):
+        with mock.patch.dict(
+            "os.environ",
+            {CACHE_ENV: str(cache), "OPENPOSTCODEUK_SKIP_IMPORT": ""},
+        ):
             self.assertTrue(should_import_during_build())
-            hooked = run_build_import(build_lib, log=None, editable=False)
+            with mock.patch(
+                "openpostcodeuk.load._declared_version", return_value="built"
+            ):
+                hooked = run_build_import(build_lib, log=None, editable=False)
+                again = run_build_import(build_lib, log=None, editable=False)
+            with mock.patch(
+                "openpostcodeuk.load._declared_version", return_value="logged"
+            ):
+                log = io.StringIO()
+                logged = run_build_import(build_lib, log=log, editable=False)
         self.assertTrue(hooked.is_file())
+        self.assertEqual(hooked, again)
+        self.assertEqual(hooked.parent, cache)
+        self.assertTrue(logged.is_file())
+        self.assertFalse((dest / "lookup.sqlite").exists())
+        self.assertIn("once per version", log.getvalue())
         with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": "yes"}):
             self.assertFalse(should_import_during_build())
-        with mock.patch("openpostcodeuk.load._usable_file", return_value=False):
-            self.assertIsNone(_installed_sqlite())
-        with mock.patch("openpostcodeuk.load._usable_file", return_value=True):
-            self.assertEqual(_installed_sqlite().name, "lookup.sqlite")
+        with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": "true"}):
+            self.assertFalse(should_import_during_build())
