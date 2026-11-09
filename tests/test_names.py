@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from opennames.names import (
+from openpostcode.names import (
     is_blank,
     normalise_postcode,
     pick_bilingual,

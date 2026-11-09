@@ -76,7 +76,7 @@ One record per postcode containing:
 - Deduplicate road names after the nearest-neighbour step so the final list contains unique names only.
 - Output format is flexible (CSV, GeoPackage, Parquet, or database); prioritise ease of downstream use.
 - Use sqlite as the intermediate processing format
-- Use cvs as the output format, one csv being the postcode lookup and one being the associated data lookup.
+- Use CSV as the published load format: one file per sqlite table (`postcode.csv`, `feature.csv`, `location.csv`) with the same columns and values.
 
 ## Constraints
 

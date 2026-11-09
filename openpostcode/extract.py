@@ -10,8 +10,8 @@ import pandas as pd
 import pyogrio
 from tqdm import tqdm
 
-from opennames import BNG_EPSG, LANDMARK_EXCLUDED_TYPES
-from opennames.names import place_label, road_label, text_or_none
+from openpostcode import BNG_EPSG, LANDMARK_EXCLUDED_TYPES
+from openpostcode.names import place_label, road_label, text_or_none
 
 _LAYER_CACHE = {}
 POSTCODE_WHERE = "local_type = 'Postcode'"

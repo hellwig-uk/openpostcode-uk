@@ -1,4 +1,4 @@
-"""Keep HEAD tracking only the current dated load zip."""
+"""Keep HEAD tracking only etl/load/openpostcode_uk.zip."""
 
 import subprocess
 from pathlib import Path
@@ -41,8 +41,6 @@ def sync_load_zip(etl_dir, output_zip_name):
     for line in listed.splitlines():
         name = Path(line).name
         if not name.startswith("openpostcode_uk_") or not name.endswith(".zip"):
-            continue
-        if name == output_zip_name:
             continue
         subprocess.run(
             ["git", "rm", "--cached", "-q", "--ignore-unmatch", line],

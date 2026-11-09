@@ -16,10 +16,8 @@ Python 3.14. Use the project virtualenv:
 | --- | --- |
 | `etl/extract/` | downloaded zips and GeoPackages (gitignored) |
 | `etl/transform/lookup.sqlite` | intermediate lookup database (gitignored) |
-| `etl/load/openpostcode_uk_YYYYDDD.zip` | published `postcodes.csv` + `features.csv` |
+| `etl/load/openpostcode_uk.zip` | published `postcode.csv`, `feature.csv`, `location.csv` (one file per sqlite table) |
 | `etl/sources.json` | OS list URLs and source-zip md5s for that export |
-
-`YYYY` is the local year of the build; `DDD` is the local day of the year (`001`–`366`).
 
 ## Commands
 
@@ -35,6 +33,12 @@ Fetch (if needed), transform, and export:
 .venv/bin/python main.py build --force
 ```
 
+Download the published zip from GitHub and rebuild sqlite (no extract/transform):
+
+```bash
+.venv/bin/python main.py import
+```
+
 Look up one postcode in sqlite:
 
 ```bash
@@ -42,7 +46,7 @@ Look up one postcode in sqlite:
 .venv/bin/python main.py get SW1A 1AA
 ```
 
-Unknown postcode exits `1`. Missing sqlite prints `sqlite not found; run build`.
+Unknown postcode exits `1`. Missing sqlite prints `sqlite not found; run build or import`.
 
 Format the tree (isort, then Black):
 

@@ -1,4 +1,4 @@
-from opennames.cli import main
+from openpostcode.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

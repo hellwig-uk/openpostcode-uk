@@ -4,9 +4,9 @@ from pathlib import Path
 
 from shapely.geometry import LineString, Point
 
-from opennames.build import transform_all
-from opennames.extract import read_landmarks, read_postcodes, read_roads
-from opennames.match import (
+from openpostcode.build import transform_all
+from openpostcode.extract import read_landmarks, read_postcodes, read_roads
+from openpostcode.match import (
     _ensure_landmark_index,
     _ensure_road_index,
     _landmark_index,

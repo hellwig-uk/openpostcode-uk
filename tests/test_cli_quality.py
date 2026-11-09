@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from opennames.cli import (
+from openpostcode.cli import (
     QUALITY_PATHS,
     _tool,
     cmd_format,
@@ -32,7 +32,7 @@ class QualityCliTests(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with mock.patch(
-            "opennames.cli.subprocess.run",
+            "openpostcode.cli.subprocess.run",
             return_value=_result(3, "out\n", "err\n"),
         ) as run:
             code = _tool(["isort", *QUALITY_PATHS], stdout, stderr)
@@ -45,7 +45,7 @@ class QualityCliTests(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with mock.patch(
-            "opennames.cli.subprocess.run",
+            "openpostcode.cli.subprocess.run",
             return_value=_result(0, "", ""),
         ):
             self.assertEqual(_tool(["black"], stdout, stderr), 0)
@@ -59,7 +59,7 @@ class QualityCliTests(unittest.TestCase):
             calls.append(cmd[2:])
             return _result(0)
 
-        with mock.patch("opennames.cli.subprocess.run", run):
+        with mock.patch("openpostcode.cli.subprocess.run", run):
             self.assertEqual(cmd_format(io.StringIO(), io.StringIO()), 0)
         self.assertEqual(
             calls,
@@ -76,7 +76,7 @@ class QualityCliTests(unittest.TestCase):
             calls.append(cmd[2])
             return _result(1)
 
-        with mock.patch("opennames.cli.subprocess.run", run):
+        with mock.patch("openpostcode.cli.subprocess.run", run):
             self.assertEqual(cmd_format(io.StringIO(), io.StringIO()), 1)
         self.assertEqual(calls, ["isort"])
 
@@ -87,7 +87,7 @@ class QualityCliTests(unittest.TestCase):
             calls.append(cmd[2])
             return _result(0 if cmd[2] == "isort" else 1)
 
-        with mock.patch("opennames.cli.subprocess.run", run):
+        with mock.patch("openpostcode.cli.subprocess.run", run):
             self.assertEqual(cmd_format(io.StringIO(), io.StringIO()), 1)
         self.assertEqual(calls, ["isort", "black"])
 
@@ -108,7 +108,7 @@ class QualityCliTests(unittest.TestCase):
                     return _result(1)
                 return _result(0)
 
-            with mock.patch("opennames.cli.subprocess.run", run):
+            with mock.patch("openpostcode.cli.subprocess.run", run):
                 code = cmd_test(io.StringIO(), io.StringIO())
             self.assertEqual(calls, expected_modules)
             self.assertEqual(code, 0 if fail_at == 0 else 1)
@@ -127,11 +127,18 @@ class QualityCliTests(unittest.TestCase):
             hoist_global_options(["get", "--etl-dir=foo", "SW1A", "1AA"]),
             ["--etl-dir=foo", "get", "SW1A", "1AA"],
         )
+        self.assertEqual(
+            hoist_global_options(["import", "--etl-dir", "x"]),
+            ["--etl-dir", "x", "import"],
+        )
 
     def test_main_dispatches_format_and_test(self):
-        with mock.patch("opennames.cli.cmd_format", return_value=0) as fmt:
+        with mock.patch("openpostcode.cli.cmd_format", return_value=0) as fmt:
             self.assertEqual(main(["format"]), 0)
             fmt.assert_called_once()
-        with mock.patch("opennames.cli.cmd_test", return_value=0) as test:
+        with mock.patch("openpostcode.cli.cmd_test", return_value=0) as test:
             self.assertEqual(main(["test"]), 0)
             test.assert_called_once()
+        with mock.patch("openpostcode.cli.cmd_import", return_value=0) as imported:
+            self.assertEqual(main(["import"], progress=False), 0)
+            imported.assert_called_once()

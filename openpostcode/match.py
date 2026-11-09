@@ -6,9 +6,9 @@ from shapely import STRtree
 from shapely import distance as shp_distance
 from shapely.geometry.base import BaseGeometry
 
-from opennames import TILE_METRES, UNIQUE_NAME_CAP
-from opennames.extract import read_landmarks, read_roads
-from opennames.names import text_or_none
+from openpostcode import TILE_METRES, UNIQUE_NAME_CAP
+from openpostcode.extract import read_landmarks, read_roads
+from openpostcode.names import text_or_none
 
 INITIAL_EXPAND_METRES = 10_000.0
 MAX_EXPAND_METRES = 2_000_000.0

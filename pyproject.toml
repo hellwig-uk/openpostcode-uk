@@ -1,5 +1,5 @@
 [project]
-name = "opennames"
+name = "openpostcode"
 version = "0.1.0"
 description = "UK postcode nearest roads and landmarks from OS Open Names and OS Open Roads"
 requires-python = ">=3.14"
@@ -16,6 +16,9 @@ dev = [
     "coverage",
 ]
 
+[tool.setuptools]
+packages = ["openpostcode"]
+
 [tool.black]
 line-length = 88
 target-version = ["py314"]
@@ -23,11 +26,11 @@ target-version = ["py314"]
 [tool.isort]
 profile = "black"
 line_length = 88
-known_first_party = ["opennames"]
+known_first_party = ["openpostcode"]
 
 [tool.coverage.run]
 branch = true
-source = ["opennames"]
+source = ["openpostcode"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

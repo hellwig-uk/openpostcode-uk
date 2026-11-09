@@ -4,5 +4,5 @@ extract/*
 transform/*
 !transform/.gitkeep
 
-# Dated load zips stay on disk. Only the current output_zip is force-added.
+# Dated leftover load zips stay on disk. openpostcode_uk.zip is tracked.
 load/openpostcode_uk_*.zip

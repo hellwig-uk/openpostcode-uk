@@ -7,7 +7,7 @@ from unittest import mock
 import geopandas as gpd
 from shapely.geometry import LineString, Point
 
-from opennames.extract import (
+from openpostcode.extract import (
     _count_rows,
     _id_column,
     find_layer,
@@ -138,11 +138,11 @@ class ExtractTests(unittest.TestCase):
         self.assertGreaterEqual(_count_rows(names, layer), 1)
         self.assertGreaterEqual(_count_rows(names, layer, "local_type = 'Postcode'"), 1)
         with mock.patch(
-            "opennames.extract.sqlite3.connect",
+            "openpostcode.extract.sqlite3.connect",
             side_effect=sqlite3.Error("nope"),
         ):
             self.assertIsNone(_count_rows(names, layer))
-        with mock.patch("opennames.extract.sqlite3.connect") as connect:
+        with mock.patch("openpostcode.extract.sqlite3.connect") as connect:
             conn = mock.MagicMock()
             conn.execute.side_effect = sqlite3.Error("bad sql")
             connect.return_value = conn

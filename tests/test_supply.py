@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest import mock
 from zipfile import ZipFile
 
-from opennames.paths import etl_paths
-from opennames.supply import (
+from openpostcode.paths import etl_paths
+from openpostcode.supply import (
     download_zip,
     ensure_product,
     fetch_extract,
@@ -199,7 +199,7 @@ class SupplyTests(unittest.TestCase):
         self.assertFalse(skip_all_downloads(self.paths, {}, {}))
         self.paths["sqlite"].write_bytes(b"sql")
         self.assertFalse(skip_all_downloads(self.paths, {}, {}))
-        (self.paths["load"] / "openpostcode_uk_2026001.zip").write_bytes(b"z")
+        (self.paths["load"] / "openpostcode_uk.zip").write_bytes(b"z")
         remote = {
             "open_names": {"md5": "aa"},
             "open_roads": {"md5": "bb"},
@@ -233,8 +233,8 @@ class SupplyTests(unittest.TestCase):
         )
         self.assertTrue(again_gpkg.is_file())
         force_log = io.StringIO()
-        with mock.patch("opennames.supply.download_zip") as download:
-            with mock.patch("opennames.supply.file_md5") as hashed:
+        with mock.patch("openpostcode.supply.download_zip") as download:
+            with mock.patch("openpostcode.supply.file_md5") as hashed:
                 forced_zip, forced_gpkg = ensure_product(
                     self.paths,
                     "open_roads",
@@ -249,7 +249,7 @@ class SupplyTests(unittest.TestCase):
         self.assertTrue(forced_gpkg.is_file())
         self.assertIn("skip download", force_log.getvalue())
         forced_gpkg.unlink()
-        with mock.patch("opennames.supply.download_zip") as download:
+        with mock.patch("openpostcode.supply.download_zip") as download:
             unzipped_zip, unzipped_gpkg = ensure_product(
                 self.paths,
                 "open_roads",
@@ -259,8 +259,8 @@ class SupplyTests(unittest.TestCase):
             )
         download.assert_not_called()
         self.assertTrue(unzipped_gpkg.is_file())
-        with mock.patch("opennames.supply.gpkg_beside", return_value=None):
-            with mock.patch("opennames.supply.unzip_gpkg", return_value=[]):
+        with mock.patch("openpostcode.supply.gpkg_beside", return_value=None):
+            with mock.patch("openpostcode.supply.unzip_gpkg", return_value=[]):
                 with self.assertRaises(FileNotFoundError):
                     ensure_product(
                         self.paths,
@@ -272,7 +272,7 @@ class SupplyTests(unittest.TestCase):
         bad = dict(remote_item)
         bad["md5"] = "0" * 32
         with mock.patch(
-            "opennames.supply.download_zip",
+            "openpostcode.supply.download_zip",
             lambda *a, **k: zpath.write_bytes(b"nope"),
         ):
             with self.assertRaises(ValueError):
@@ -280,7 +280,7 @@ class SupplyTests(unittest.TestCase):
 
     def test_fetch_extract_skip_and_download(self):
         self.paths["sqlite"].write_bytes(b"sql")
-        (self.paths["load"] / "openpostcode_uk_2026001.zip").write_bytes(b"z")
+        (self.paths["load"] / "openpostcode_uk.zip").write_bytes(b"z")
         digest = "ab" * 16
         sources = {
             "open_names": {"md5": digest},
@@ -304,11 +304,11 @@ class SupplyTests(unittest.TestCase):
             },
         }
         log = io.StringIO()
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             listed, gpkgs = fetch_extract(self.paths, progress=False, log=log)
         self.assertIs(gpkgs, False)
         self.assertIn("load and sqlite current", log.getvalue())
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             listed, gpkgs = fetch_extract(self.paths, progress=False, log=None)
         self.assertIs(gpkgs, False)
         self.assertEqual(listed, remote)
@@ -316,9 +316,9 @@ class SupplyTests(unittest.TestCase):
         dummy_gpkg = self.paths["extract"] / "opname_gb.gpkg"
         dummy_zip.write_bytes(b"z")
         dummy_gpkg.write_bytes(b"g")
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             with mock.patch(
-                "opennames.supply.ensure_product",
+                "openpostcode.supply.ensure_product",
                 return_value=(dummy_zip, dummy_gpkg),
             ) as ensure:
                 _listed, gpkgs = fetch_extract(
@@ -343,7 +343,7 @@ class SupplyTests(unittest.TestCase):
                 return FakeResponse(nz.read_bytes(), headers={"Content-Length": "1"})
             return FakeResponse(rz.read_bytes(), headers={"Content-Length": "1"})
 
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             with mock.patch("urllib.request.urlopen", opener):
                 _listed, gpkgs = fetch_extract(
                     self.paths, progress=False, log=io.StringIO()
@@ -374,7 +374,7 @@ class SupplyTests(unittest.TestCase):
             "size": 1,
             "url": "https://blob",
         }
-        with mock.patch("opennames.supply.unzip_gpkg", return_value=[]):
-            with mock.patch("opennames.supply.gpkg_beside", return_value=None):
+        with mock.patch("openpostcode.supply.unzip_gpkg", return_value=[]):
+            with mock.patch("openpostcode.supply.gpkg_beside", return_value=None):
                 with self.assertRaises(FileNotFoundError):
                     ensure_product(self.paths, "open_names", remote_item)

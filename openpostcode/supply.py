@@ -9,7 +9,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from opennames.paths import ensure_dirs
+from openpostcode.paths import OUTPUT_ZIP_NAME, ensure_dirs
 
 OPEN_NAMES_LIST = (
     "https://api.os.uk/downloads/v1/products/OpenNames/downloads"
@@ -91,7 +91,7 @@ def list_all_products():
 
 
 def _load_zip_present(load_dir):
-    return any(Path(load_dir).glob("openpostcode_uk_*.zip"))
+    return (Path(load_dir) / OUTPUT_ZIP_NAME).is_file()
 
 
 def skip_all_downloads(paths, remote, sources):

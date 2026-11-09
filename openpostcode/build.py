@@ -4,13 +4,13 @@ import sys
 
 from tqdm import tqdm
 
-from opennames import UNIQUE_NAME_CAP
-from opennames.extract import read_postcodes
-from opennames.gitindex import sync_load_zip
-from opennames.match import assign_tiles, match_tile
-from opennames.paths import ensure_dirs
-from opennames.store import connect, export_zip, output_zip_name, write_rows
-from opennames.supply import fetch_extract, load_sources, save_sources
+from openpostcode import UNIQUE_NAME_CAP
+from openpostcode.extract import read_postcodes
+from openpostcode.gitindex import sync_load_zip
+from openpostcode.match import assign_tiles, match_tile
+from openpostcode.paths import OUTPUT_ZIP_NAME, ensure_dirs
+from openpostcode.store import LOAD_ZIP_URL, connect, export_zip, import_zip, write_rows
+from openpostcode.supply import download_zip, fetch_extract, load_sources, save_sources
 
 
 def transform_all(names_gpkg, roads_gpkg, progress=False, writer=None):
@@ -96,7 +96,7 @@ def write_catalog(paths, remote, output_zip):
     save_sources(paths["sources"], payload)
 
 
-def run_build(paths, progress=False, log=None, when=None, force=False):
+def run_build(paths, progress=False, log=None, force=False):
     ensure_dirs(paths)
     remote, gpkgs = fetch_extract(paths, progress=progress, log=log, force=force)
     if gpkgs is False:
@@ -115,11 +115,18 @@ def run_build(paths, progress=False, log=None, when=None, force=False):
 
     try:
         transform_all(names_gpkg, roads_gpkg, progress=progress, writer=writer)
-        zip_name = output_zip_name(when=when)
-        zip_path = paths["load"] / zip_name
+        zip_path = paths["load"] / OUTPUT_ZIP_NAME
         export_zip(conn, zip_path, progress=progress)
     finally:
         conn.close()
-    write_catalog(paths, remote, zip_name)
-    sync_load_zip(paths["root"], zip_name)
+    write_catalog(paths, remote, OUTPUT_ZIP_NAME)
+    sync_load_zip(paths["root"], OUTPUT_ZIP_NAME)
+    return 0
+
+
+def run_import(paths, progress=False):
+    ensure_dirs(paths)
+    zip_path = paths["load"] / OUTPUT_ZIP_NAME
+    download_zip(LOAD_ZIP_URL, zip_path, progress=progress)
+    import_zip(zip_path, paths["sqlite"], progress=progress)
     return 0

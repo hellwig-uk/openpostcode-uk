@@ -1,15 +1,15 @@
-"""Sqlite lookup store and dated zip export."""
+"""Sqlite lookup store and table-CSV zip export."""
 
 import csv
 import io
 import sqlite3
 import zipfile
-from datetime import date
 from pathlib import Path
 
 from tqdm import tqdm
 
-from opennames.names import text_or_none
+from openpostcode.names import text_or_none
+from openpostcode.paths import OUTPUT_ZIP_NAME
 
 SCHEMA = """
 CREATE TABLE postcode (
@@ -38,6 +38,39 @@ CREATE TABLE location (
 );
 """
 
+LOAD_ZIP_URL = (
+    "https://raw.githubusercontent.com/hellwig-uk/openpostcode-uk"
+    "/main/etl/load/openpostcode_uk.zip"
+)
+TABLE_ORDER = ("postcode", "feature", "location")
+TABLE_COLUMNS = {
+    "postcode": ("postcode", "x", "y"),
+    "feature": (
+        "id",
+        "kind",
+        "name",
+        "unnamed",
+        "classification",
+        "local_type",
+        "populated_place",
+        "district_borough",
+        "county_unitary",
+        "country",
+    ),
+    "location": ("postcode", "rank", "feature_id", "distance_m"),
+}
+TABLE_ORDER_BY = {
+    "postcode": "postcode",
+    "feature": "id",
+    "location": "postcode, rank",
+}
+INTEGER_COLUMNS = frozenset({"id", "unnamed", "rank", "feature_id", "distance_m"})
+REAL_COLUMNS = frozenset({"x", "y"})
+
+
+def output_zip_name():
+    return OUTPUT_ZIP_NAME
+
 
 def feature_key(row):
     return (
@@ -51,11 +84,6 @@ def feature_key(row):
         row.get("county_unitary"),
         row.get("country"),
     )
-
-
-def output_zip_name(when=None):
-    day = when or date.today()
-    return f"openpostcode_uk_{day:%Y}{day:%j}.zip"
 
 
 def connect(sqlite_path):
@@ -138,61 +166,90 @@ def write_rows(conn, postcodes_features, progress=False, keys=None, next_id=1):
     return keys, next_id
 
 
+def _csv_cells(row):
+    return ["" if value is None else value for value in row]
+
+
+def _parse_cell(column, value):
+    if value == "":
+        return None
+    if column in INTEGER_COLUMNS:
+        return int(value)
+    if column in REAL_COLUMNS:
+        return float(value)
+    return value
+
+
+def _table_rows(conn, table):
+    columns = TABLE_COLUMNS[table]
+    sql = (
+        f"SELECT {', '.join(columns)} FROM {table} " f"ORDER BY {TABLE_ORDER_BY[table]}"
+    )
+    return columns, conn.execute(sql)
+
+
 def export_zip(conn, zip_path, progress=False):
     zip_path = Path(zip_path)
     zip_path.parent.mkdir(parents=True, exist_ok=True)
-    postcodes_buf = io.StringIO()
-    features_buf = io.StringIO()
-    post_writer = csv.writer(postcodes_buf)
-    feat_writer = csv.writer(features_buf)
-    post_writer.writerow(["postcode", "x", "y", "rank", "feature_id", "distance_m"])
-    feat_writer.writerow(
-        [
-            "feature_id",
-            "kind",
-            "name",
-            "unnamed",
-            "classification",
-            "local_type",
-            "populated_place",
-            "district_borough",
-            "county_unitary",
-            "country",
-        ]
-    )
-    n_loc = conn.execute("SELECT COUNT(*) FROM location").fetchone()[0]
-    loc_rows = conn.execute("""
-        SELECT p.postcode, p.x, p.y, l.rank, l.feature_id, l.distance_m
-        FROM postcode AS p
-        JOIN location AS l ON l.postcode = p.postcode
-        ORDER BY p.postcode, l.rank
-        """)
-    for row in tqdm(
-        loc_rows,
-        total=n_loc,
-        desc="write postcodes.csv",
-        unit="row",
-        disable=not progress,
-        dynamic_ncols=True,
-    ):
-        post_writer.writerow(row)
-    n_feat = conn.execute("SELECT COUNT(*) FROM feature").fetchone()[0]
-    feat_rows = conn.execute("""
-        SELECT id, kind, name, unnamed, classification, local_type,
-               populated_place, district_borough, county_unitary, country
-        FROM feature
-        ORDER BY id
-        """)
-    for row in tqdm(
-        feat_rows,
-        total=n_feat,
-        desc="write features.csv",
-        unit="row",
-        disable=not progress,
-        dynamic_ncols=True,
-    ):
-        feat_writer.writerow(row)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("postcodes.csv", postcodes_buf.getvalue())
-        archive.writestr("features.csv", features_buf.getvalue())
+        for table in TABLE_ORDER:
+            columns, rows = _table_rows(conn, table)
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(columns)
+            total = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for row in tqdm(
+                rows,
+                total=total,
+                desc=f"write {table}.csv",
+                unit="row",
+                disable=not progress,
+                dynamic_ncols=True,
+            ):
+                writer.writerow(_csv_cells(row))
+            archive.writestr(f"{table}.csv", buf.getvalue())
     return zip_path
+
+
+def import_zip(zip_path, sqlite_path, progress=False):
+    zip_path = Path(zip_path)
+    conn = connect(sqlite_path)
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            names = set(archive.namelist())
+            for table in TABLE_ORDER:
+                filename = f"{table}.csv"
+                if filename not in names:
+                    raise ValueError(f"missing {filename}")
+                columns = TABLE_COLUMNS[table]
+                with archive.open(filename) as raw:
+                    text = io.TextIOWrapper(raw, encoding="utf-8", newline="")
+                    reader = csv.reader(text)
+                    header = tuple(next(reader))
+                    if header != columns:
+                        raise ValueError(f"bad header in {filename}")
+                    records = [
+                        tuple(
+                            _parse_cell(column, value)
+                            for column, value in zip(columns, line)
+                        )
+                        for line in reader
+                    ]
+                placeholders = ", ".join("?" * len(columns))
+                col_sql = ", ".join(columns)
+                iterable = records
+                if progress:
+                    iterable = tqdm(
+                        records,
+                        desc=f"load {table}.csv",
+                        unit="row",
+                        dynamic_ncols=True,
+                    )
+                conn.executemany(
+                    f"INSERT INTO {table} ({col_sql}) VALUES ({placeholders})",
+                    iterable,
+                )
+        conn.commit()
+    finally:
+        conn.close()
+    return sqlite_path

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+OUTPUT_ZIP_NAME = "openpostcode_uk.zip"
+
 
 def etl_paths(etl_dir):
     root = Path(etl_dir)

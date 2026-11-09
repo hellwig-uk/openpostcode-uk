@@ -3,14 +3,16 @@ import runpy
 import sys
 import tempfile
 import unittest
-from datetime import date
 from pathlib import Path
 from unittest import mock
 from zipfile import ZipFile
 
-from opennames.cli import main, main_get
-from opennames.paths import etl_paths
-from opennames.supply import file_md5
+from openpostcode.cli import main, main_get
+from openpostcode.extract import read_landmarks, read_postcodes, read_roads
+from openpostcode.match import features_for_point
+from openpostcode.paths import OUTPUT_ZIP_NAME, etl_paths
+from openpostcode.store import LOAD_ZIP_URL, connect, export_zip, write_rows
+from openpostcode.supply import file_md5
 from tests.common import (
     sample_names,
     sample_roads,
@@ -86,9 +88,9 @@ class CliBuildTests(unittest.TestCase):
 
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             with mock.patch("urllib.request.urlopen", opener):
-                with mock.patch("opennames.build.sync_load_zip"):
+                with mock.patch("openpostcode.build.sync_load_zip"):
                     code = main(
                         ["--etl-dir", str(self.etl), "build"],
                         stdout=stdout,
@@ -96,10 +98,13 @@ class CliBuildTests(unittest.TestCase):
                         progress=False,
                     )
                     self.assertEqual(code, 0)
-                    zips = list(self.paths["load"].glob("openpostcode_uk_*.zip"))
-                    self.assertEqual(len(zips), 1)
-                    with ZipFile(zips[0]) as archive:
-                        self.assertIn("postcodes.csv", archive.namelist())
+                    zpath = self.paths["load"] / OUTPUT_ZIP_NAME
+                    self.assertTrue(zpath.is_file())
+                    with ZipFile(zpath) as archive:
+                        self.assertEqual(
+                            set(archive.namelist()),
+                            {"postcode.csv", "feature.csv", "location.csv"},
+                        )
                     out = io.StringIO()
                     err = io.StringIO()
                     code = main(
@@ -142,13 +147,14 @@ class CliBuildTests(unittest.TestCase):
                     )
                     self.assertEqual(code, 0)
                     self.assertIn("build", help_out.getvalue())
+                    self.assertIn("import", help_out.getvalue())
                     self.assertIn("--force", help_out.getvalue())
 
     def test_build_skips_when_current(self):
         remote = self._remote()
         self.paths["sqlite"].write_text("x")
-        (self.paths["load"] / "openpostcode_uk_2026001.zip").write_bytes(b"z")
-        from opennames.supply import save_sources
+        (self.paths["load"] / OUTPUT_ZIP_NAME).write_bytes(b"z")
+        from openpostcode.supply import save_sources
 
         save_sources(
             self.paths["sources"],
@@ -157,7 +163,7 @@ class CliBuildTests(unittest.TestCase):
                 "open_roads": {"md5": remote["open_roads"]["md5"]},
             },
         )
-        with mock.patch("opennames.supply.list_all_products", return_value=remote):
+        with mock.patch("openpostcode.supply.list_all_products", return_value=remote):
             code = main(
                 ["--etl-dir", str(self.etl), "build"],
                 progress=False,
@@ -166,14 +172,14 @@ class CliBuildTests(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_entrypoints(self):
-        with mock.patch("opennames.cli.main", return_value=0):
+        with mock.patch("openpostcode.cli.main", return_value=0):
             with self.assertRaises(SystemExit) as raised:
                 runpy.run_path(
                     str(Path(__file__).resolve().parents[1] / "main.py"),
                     run_name="__main__",
                 )
             self.assertEqual(raised.exception.code, 0)
-        with mock.patch("opennames.cli.main_get", return_value=0):
+        with mock.patch("openpostcode.cli.main_get", return_value=0):
             with self.assertRaises(SystemExit) as raised:
                 runpy.run_path(
                     str(Path(__file__).resolve().parents[1] / "get.py"),
@@ -185,29 +191,65 @@ class CliBuildTests(unittest.TestCase):
         with mock.patch.object(
             sys, "argv", ["main.py", "--etl-dir", str(self.etl), "build"]
         ):
-            with mock.patch("opennames.cli.cmd_build", return_value=0) as fn:
+            with mock.patch("openpostcode.cli.cmd_build", return_value=0) as fn:
                 self.assertEqual(main(progress=False), 0)
                 fn.assert_called()
         out = io.StringIO()
         with mock.patch.object(sys, "argv", ["main.py"]):
-            with mock.patch("opennames.cli.cmd_build") as fn:
+            with mock.patch("openpostcode.cli.cmd_build") as fn:
                 self.assertEqual(main(stdout=out, progress=False), 0)
                 fn.assert_not_called()
         self.assertIn("usage:", out.getvalue())
         self.assertIn("--force", out.getvalue())
         with mock.patch.object(sys, "argv", ["get.py", "SW1A1AA"]):
-            with mock.patch("opennames.cli.cmd_get", return_value=0) as fn:
+            with mock.patch("openpostcode.cli.cmd_get", return_value=0) as fn:
                 self.assertEqual(main_get(), 0)
                 fn.assert_called()
 
+    def test_import_rebuilds_sqlite(self):
+        posts = read_postcodes(self.names)
+        roads = read_roads(self.roads)
+        marks = read_landmarks(self.names)
+        collected = []
+        for _pos, row in posts.iterrows():
+            ranked = features_for_point(row.geometry, roads, marks, cap=5)
+            collected.append((row, ranked))
+        src = self.root / "src.sqlite"
+        conn = connect(src)
+        write_rows(conn, collected)
+        zpath = export_zip(conn, self.root / "src.zip")
+        conn.close()
+
+        def fake_download(url, dest, expected_size=None, progress=False):
+            self.assertEqual(url, LOAD_ZIP_URL)
+            Path(dest).write_bytes(zpath.read_bytes())
+
+        with mock.patch("openpostcode.build.download_zip", fake_download):
+            code = main(
+                ["--etl-dir", str(self.etl), "import"],
+                progress=False,
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
+        self.assertEqual(code, 0)
+        out = io.StringIO()
+        code = main(
+            ["--etl-dir", str(self.etl), "get", "sw1a", "1aa"],
+            stdout=out,
+            stderr=io.StringIO(),
+            progress=False,
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("The Palace", out.getvalue())
+
     def test_build_force_flag(self):
-        with mock.patch("opennames.cli.cmd_build", return_value=0) as fn:
+        with mock.patch("openpostcode.cli.cmd_build", return_value=0) as fn:
             main(["build", "--force"], progress=False)
         self.assertTrue(fn.call_args.kwargs["force"])
 
     def test_progress_tty(self):
         with mock.patch.object(sys.stderr, "isatty", return_value=True):
-            with mock.patch("opennames.cli.cmd_build", return_value=0) as fn:
+            with mock.patch("openpostcode.cli.cmd_build", return_value=0) as fn:
                 main(["--etl-dir", str(self.etl), "build"])
                 self.assertTrue(fn.call_args.kwargs["progress"])
                 self.assertFalse(fn.call_args.kwargs["force"])

@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from opennames.names import normalise_postcode
+from openpostcode.names import normalise_postcode
 
 FIELDS = (
     "kind",
@@ -60,7 +60,10 @@ def format_null(value):
 def render_locations(rows):
     blocks = []
     for row in rows:
-        lines = [f"{row['name']} = {row['distance_m']}"]
+        lines = [
+            f"{row['kind']}: {row['name']}",
+            f"weighted_distance: {row['distance_m']}",
+        ]
         for key in FIELDS:
             lines.append(f"{key}: {format_null(row[key])}")
         lines.append("-------")
@@ -72,7 +75,7 @@ def lookup(sqlite_path, tokens):
     postcode = normalise_postcode(" ".join(tokens))
     conn = open_db(sqlite_path)
     if conn is None:
-        return 1, "", "sqlite not found; run build"
+        return 1, "", "sqlite not found; run build or import"
     try:
         if not postcode_exists(conn, postcode):
             return 1, "", "postcode not found"

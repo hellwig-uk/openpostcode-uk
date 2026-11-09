@@ -4,42 +4,42 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from opennames.gitindex import _repo_root, sync_load_zip
+from openpostcode.gitindex import _repo_root, sync_load_zip
 
 
 class GitIndexTests(unittest.TestCase):
     def test_repo_root_missing(self):
         with mock.patch(
-            "opennames.gitindex.subprocess.check_output",
+            "openpostcode.gitindex.subprocess.check_output",
             side_effect=FileNotFoundError,
         ):
             self.assertIsNone(_repo_root("."))
         with mock.patch(
-            "opennames.gitindex.subprocess.check_output",
+            "openpostcode.gitindex.subprocess.check_output",
             side_effect=subprocess.CalledProcessError(1, "git"),
         ):
             self.assertIsNone(_repo_root("."))
 
     def test_sync_skips_without_repo(self):
-        with mock.patch("opennames.gitindex._repo_root", return_value=None):
-            sync_load_zip("/tmp/etl", "openpostcode_uk_2026001.zip")
+        with mock.patch("openpostcode.gitindex._repo_root", return_value=None):
+            sync_load_zip("/tmp/etl", "openpostcode_uk.zip")
 
     def test_sync_skips_other_etl_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
             etl = Path(tmp) / "etl"
             etl.mkdir()
             with mock.patch(
-                "opennames.gitindex._repo_root",
+                "openpostcode.gitindex._repo_root",
                 return_value=Path(tmp) / "repo",
             ):
-                sync_load_zip(etl, "openpostcode_uk_2026001.zip")
+                sync_load_zip(etl, "openpostcode_uk.zip")
 
     def test_sync_adds_and_removes(self):
         with tempfile.TemporaryDirectory() as tmp:
             top = Path(tmp)
             etl = top / "etl"
             (etl / "load").mkdir(parents=True)
-            zip_name = "openpostcode_uk_2026002.zip"
+            zip_name = "openpostcode_uk.zip"
             calls = []
 
             def check_output(cmd, cwd=None, text=False, stderr=None):
@@ -58,8 +58,10 @@ class GitIndexTests(unittest.TestCase):
                 calls.append(("run", cmd, cwd))
                 return subprocess.CompletedProcess(cmd, 0)
 
-            with mock.patch("opennames.gitindex.subprocess.check_output", check_output):
-                with mock.patch("opennames.gitindex.subprocess.run", run):
+            with mock.patch(
+                "openpostcode.gitindex.subprocess.check_output", check_output
+            ):
+                with mock.patch("openpostcode.gitindex.subprocess.run", run):
                     sync_load_zip(etl, zip_name)
             run_cmds = [item[1] for item in calls if item[0] == "run"]
             self.assertIn(["git", "add", "-f", f"etl/load/{zip_name}"], run_cmds)
