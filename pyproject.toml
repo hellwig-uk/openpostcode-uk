@@ -1,6 +1,6 @@
 [project]
 name = "openpostcodeuk"
-version = "1.2026.1"
+version = "1.2026.299"
 description = "UK postcode nearest roads and landmarks from OS Open Names and OS Open Roads"
 readme = "README.md"
 license = "MIT"

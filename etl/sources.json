@@ -11,5 +11,6 @@
     "md5": "0c7a04d0698268aeda5a717444f646d8",
     "size": 1010630367
   },
-  "output_zip": "openpostcode_uk.zip"
+  "output_zip": "openpostcode_uk.zip",
+  "package_version": "1.2026.299"
 }
