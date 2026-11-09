@@ -30,12 +30,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f etl/load/openpostcode_uk.zip etl/sources.json pyproject.toml openpostcodeuk/data/openpostcode_uk.zip
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           if git diff --cached --quiet; then
             echo "no export changes"
-            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
+              echo "tagged=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git tag "v${VERSION}"
+            git push origin "v${VERSION}"
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           git commit -m "export ${VERSION}"
           git tag "v${VERSION}"
           git push origin HEAD:main --tags
