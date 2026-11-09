@@ -2,10 +2,17 @@
 
 import importlib.util
 import sys
+import tomllib
 from pathlib import Path
 
 from setuptools import setup
 from setuptools.command.build_py import build_py
+
+
+def _project_version():
+    path = Path(__file__).resolve().parent / "pyproject.toml"
+    with path.open("rb") as handle:
+        return tomllib.load(handle)["project"]["version"]
 
 
 class BuildPy(build_py):
@@ -24,6 +31,7 @@ class BuildPy(build_py):
                 self.build_lib,
                 log=sys.stderr,
                 editable=getattr(self, "editable_mode", False),
+                version=_project_version(),
             )
         finally:
             sys.path.pop(0)

@@ -269,22 +269,30 @@ class OpenpostcodeukTests(unittest.TestCase):
             {CACHE_ENV: str(cache), "OPENPOSTCODEUK_SKIP_IMPORT": ""},
         ):
             self.assertTrue(should_import_during_build())
+            hooked = run_build_import(
+                build_lib, log=None, editable=False, version="built"
+            )
+            again = run_build_import(
+                build_lib, log=None, editable=False, version="built"
+            )
+            log = io.StringIO()
+            logged = run_build_import(
+                build_lib, log=log, editable=False, version="logged"
+            )
             with mock.patch(
-                "openpostcodeuk.load._declared_version", return_value="built"
+                "openpostcodeuk.load._declared_version", return_value="from-meta"
             ):
-                hooked = run_build_import(build_lib, log=None, editable=False)
-                again = run_build_import(build_lib, log=None, editable=False)
-            with mock.patch(
-                "openpostcodeuk.load._declared_version", return_value="logged"
-            ):
-                log = io.StringIO()
-                logged = run_build_import(build_lib, log=log, editable=False)
+                via_meta = run_build_import(build_lib, log=None, editable=False)
         self.assertTrue(hooked.is_file())
         self.assertEqual(hooked, again)
+        self.assertEqual(hooked.name, "built.sqlite")
         self.assertEqual(hooked.parent, cache)
         self.assertTrue(logged.is_file())
+        self.assertEqual(logged.name, "logged.sqlite")
+        self.assertEqual(via_meta.name, "from-meta.sqlite")
         self.assertFalse((dest / "lookup.sqlite").exists())
         self.assertIn("once per version", log.getvalue())
+        self.assertIn("postcode.csv", log.getvalue())
         with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": "yes"}):
             self.assertFalse(should_import_during_build())
         with mock.patch.dict("os.environ", {"OPENPOSTCODEUK_SKIP_IMPORT": "true"}):

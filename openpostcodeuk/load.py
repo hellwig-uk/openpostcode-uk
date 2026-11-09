@@ -82,8 +82,15 @@ def _sqlite_from_zip(zip_path, key, log=None):
     if log is not None:
         log.write("Importing lookup database from CSV zip (once per version)...\n")
         log.flush()
+
+    def progress_iter(records, table):
+        if log is not None:
+            log.write(f"  {table}.csv ({len(records)} rows)\n")
+            log.flush()
+        return records
+
     tmp = dest.with_name(dest.name + ".partial")
-    import_zip(zip_path, tmp)
+    import_zip(zip_path, tmp, progress_iter=progress_iter)
     tmp.replace(dest)
     if log is not None:
         log.write("Lookup database ready.\n")
@@ -96,7 +103,7 @@ def should_import_during_build():
     return value not in {"1", "true", "yes"}
 
 
-def run_build_import(build_lib, log=None, editable=False):
+def run_build_import(build_lib, log=None, editable=False, version=None):
     if editable:
         return None
     if not should_import_during_build():
@@ -106,7 +113,8 @@ def run_build_import(build_lib, log=None, editable=False):
     zip_path = Path(build_lib) / "openpostcodeuk" / "data" / OUTPUT_ZIP_NAME
     if not _usable_file(zip_path):
         return None
-    return _sqlite_from_zip(zip_path, _declared_version(), log=log)
+    key = version if version else _declared_version()
+    return _sqlite_from_zip(zip_path, key, log=log)
 
 
 def ensure_sqlite(log=None):

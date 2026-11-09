@@ -31,6 +31,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f etl/load/openpostcode_uk.zip etl/sources.json pyproject.toml openpostcodeuk/data/openpostcode_uk.zip
           VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "publish=false" >> "$GITHUB_OUTPUT"
           if git diff --cached --quiet; then
             echo "no export changes"
             if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
@@ -47,9 +48,10 @@ jobs:
           git tag "v${VERSION}"
           git push origin HEAD:main --tags
           echo "tagged=true" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
       - name: Dispatch PyPI publish
-        if: steps.release.outputs.tagged == 'true'
+        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
