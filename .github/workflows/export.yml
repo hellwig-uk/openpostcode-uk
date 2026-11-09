@@ -18,6 +18,8 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install
+        env:
+          OPENPOSTCODEUK_SKIP_IMPORT: "1"
         run: python -m pip install -e ".[dev]"
       - name: Export
         run: python main.py export

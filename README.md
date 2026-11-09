@@ -293,7 +293,7 @@ import openpostcodeuk as opuk
 opuk.get("SE1 9SG")
 ```
 
-Default install is stdlib only. `opuk.get` and `openpostcode_uk` load the zip shipped inside the wheel, materialise sqlite in a temp cache keyed by package version, and query it. There is no GitHub fetch at lookup time and no geopandas.
+Default install is stdlib only. `pip install` builds a wheel and **imports the CSV zip into sqlite as part of that build** (several minutes, once). After that, `opuk.get` and `openpostcode_uk` open the packaged `lookup.sqlite` and return immediately. There is no GitHub fetch at lookup time and no geopandas. Set `OPENPOSTCODEUK_SKIP_IMPORT=1` to skip the import (editable/dev installs that only need the ETL tools).
 
 From a clone, the same lookup without a wheel install still needs that zip (from git, or after `export` / `import`). Then:
 

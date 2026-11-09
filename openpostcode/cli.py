@@ -9,7 +9,14 @@ from openpostcode.export import run_export, run_import
 from openpostcode.lookup import lookup
 from openpostcode.paths import etl_paths
 
-QUALITY_PATHS = ("openpostcode", "openpostcodeuk", "tests", "main.py", "get.py")
+QUALITY_PATHS = (
+    "openpostcode",
+    "openpostcodeuk",
+    "tests",
+    "main.py",
+    "get.py",
+    "setup.py",
+)
 _COMMANDS = {"export", "get", "format", "test", "import"}
 _VALUE_FLAGS = {"--etl-dir"}
 _BARE_FLAGS = {"--force"}

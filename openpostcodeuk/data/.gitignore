@@ -1,0 +1,4 @@
+lookup.sqlite
+lookup.sqlite-wal
+lookup.sqlite-shm
+lookup.sqlite-journal
